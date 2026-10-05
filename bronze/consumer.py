@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import logging
 import os
+import time
 from pathlib import Path
 
 from aiokafka import AIOKafkaConsumer
@@ -13,6 +14,12 @@ from bronze.storage import GCSObjectStore, LocalObjectStore
 from bronze.writer import BronzeBatchWriter, KafkaRawRecord
 from ingestion.config import Settings
 from ingestion.logging import configure_logging
+
+
+def should_flush(
+    *, pending_count: int, batch_size: int, now: float, deadline: float, once: bool
+) -> bool:
+    return pending_count > 0 and (pending_count >= batch_size or now >= deadline or once)
 
 
 def build_store() -> LocalObjectStore | GCSObjectStore:
@@ -36,13 +43,29 @@ async def run_consumer(*, once: bool = False) -> None:
     )
     writer = BronzeBatchWriter(build_store())
     batch_size = int(os.getenv("ATMOSPULSE_BRONZE_BATCH_SIZE", "10000"))
-    flush_ms = int(float(os.getenv("ATMOSPULSE_BRONZE_FLUSH_SECONDS", "10")) * 1000)
+    flush_seconds = float(os.getenv("ATMOSPULSE_BRONZE_FLUSH_SECONDS", "10"))
+    if batch_size <= 0:
+        raise ValueError("ATMOSPULSE_BRONZE_BATCH_SIZE must be positive")
+    if flush_seconds <= 0:
+        raise ValueError("ATMOSPULSE_BRONZE_FLUSH_SECONDS must be positive")
+    pending: list[KafkaRawRecord] = []
+    flush_deadline = time.monotonic() + flush_seconds
     await consumer.start()
-    logger.info("bronze_consumer_started", extra={"fields": {"batch_size": batch_size}})
+    logger.info(
+        "bronze_consumer_started",
+        extra={
+            "fields": {
+                "batch_size": batch_size,
+                "flush_seconds": flush_seconds,
+            }
+        },
+    )
     try:
         while True:
-            batches = await consumer.getmany(timeout_ms=flush_ms, max_records=batch_size)
-            records = [
+            remaining = max(1, batch_size - len(pending))
+            timeout_ms = max(1, int((flush_deadline - time.monotonic()) * 1000))
+            batches = await consumer.getmany(timeout_ms=timeout_ms, max_records=remaining)
+            pending.extend(
                 KafkaRawRecord(
                     topic=message.topic,
                     partition=message.partition,
@@ -53,14 +76,22 @@ async def run_consumer(*, once: bool = False) -> None:
                 )
                 for messages in batches.values()
                 for message in messages
-            ]
-            if records:
-                result = await asyncio.to_thread(writer.write, records)
+            )
+            if should_flush(
+                pending_count=len(pending),
+                batch_size=batch_size,
+                now=time.monotonic(),
+                deadline=flush_deadline,
+                once=once,
+            ):
+                result = await asyncio.to_thread(writer.write, pending)
                 await consumer.commit()
                 logger.info(
                     "bronze_offsets_committed",
-                    extra={"fields": {"batch_id": result.batch_id, "count": len(records)}},
+                    extra={"fields": {"batch_id": result.batch_id, "count": len(pending)}},
                 )
+                pending.clear()
+                flush_deadline = time.monotonic() + flush_seconds
             if once:
                 return
     except Exception:
