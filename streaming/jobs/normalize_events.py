@@ -20,6 +20,28 @@ from streaming.observability import StructuredLoggingQueryListener
 from streaming.schemas.events import EVENT_ENVELOPE_SCHEMA
 
 
+def positive_int_env(name: str, default: int) -> int:
+    value = int(os.getenv(name, str(default)))
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+def streaming_spark_configs() -> dict[str, str]:
+    return {
+        "spark.sql.shuffle.partitions": os.getenv("ATMOSPULSE_SPARK_SHUFFLE_PARTITIONS", "12"),
+        "spark.sql.streaming.stateStore.providerClass": os.getenv(
+            "ATMOSPULSE_SPARK_STATE_STORE_PROVIDER",
+            "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
+        ),
+        "spark.sql.streaming.stateStore.rocksdb.boundedMemoryUsage": "true",
+        "spark.sql.streaming.stateStore.rocksdb.maxMemoryUsageMB": str(
+            positive_int_env("ATMOSPULSE_SPARK_ROCKSDB_MEMORY_MB", 512)
+        ),
+        "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled": "true",
+    }
+
+
 def kafka_events(spark: SparkSession, bootstrap_servers: str, topic: str) -> DataFrame:
     raw = (
         spark.readStream.format("kafka")
@@ -27,6 +49,10 @@ def kafka_events(spark: SparkSession, bootstrap_servers: str, topic: str) -> Dat
         .option("subscribe", topic)
         .option("startingOffsets", "earliest")
         .option("failOnDataLoss", "true")
+        .option(
+            "maxOffsetsPerTrigger",
+            positive_int_env("ATMOSPULSE_SPARK_MAX_OFFSETS_PER_TRIGGER", 150_000),
+        )
         .load()
     )
     return (
@@ -127,6 +153,9 @@ def main() -> int:
     args = parser.parse_args()
     configure_logging(os.getenv("ATMOSPULSE_LOG_LEVEL", "INFO"))
     builder = SparkSession.builder.appName("AtmosPulseSilver")
+    if args.mode == "stream":
+        for key, value in streaming_spark_configs().items():
+            builder = builder.config(key, value)
     packages = [
         item.strip()
         for item in os.getenv("ATMOSPULSE_SPARK_EXTRA_PACKAGES", "").split(",")
