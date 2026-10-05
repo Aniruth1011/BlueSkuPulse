@@ -19,8 +19,9 @@ Airflow -> bounded hourly/reconciliation/backfill commands
 Services + batch outcomes -> Prometheus -> Alertmanager + Grafana health
 ```
 
-All SLO and throughput values are **TARGETS** until the benchmark harness produces measured
-results. No performance result is claimed in this repository yet.
+Unmeasured SLOs remain **TARGETS**. The local ingestion, replay, deduplication, and failure results
+in the Evidence section are measured results from the named commits and environment; they are not
+claims about production or GCP performance.
 
 ## Local quick start
 
@@ -137,10 +138,27 @@ never silently resets to the live tip.
 
 ## Evidence
 
-Measured evidence will be added only after the corresponding benchmark has run. See
-`docs/benchmark.md` for the required reporting format.
+Measured on 2026-10-05 on an Apple-silicon MacBook Air. Kafka/Redpanda, Bronze, and Spark ran in a
+2-vCPU Colima VM. Producer profiles used 4 GiB VM memory; the corrected large-state Spark replay
+used 8 GiB. The host reported macOS 26.6, arm64, 10 logical CPUs, and Python 3.14.8. Full methods,
+limitations, and artifact names are in [`docs/benchmark.md`](docs/benchmark.md).
 
-Phase 6 functional validation currently executes 28 dbt models and 88 dbt data tests against the
+| Claim | Measured result | Reproduce | Commit |
+|---|---:|---|---|
+| Sustained broker-acknowledged ingestion | 1,800,000 events in 1,800.020s; 999.989 events/s; p95 acknowledgement latency 974.176ms; 0 errors | `./scripts/metrics/run.sh full` | `044a4461fe88105db69b3add1a55ca08b6fb8df7` |
+| Five-minute burst | 1,500,000 events in 300.023s; 4,999.613 events/s; p95 acknowledgement latency 199.272ms; 0 errors | same command | `044a4461fe88105db69b3add1a55ca08b6fb8df7` |
+| Five-million-event unthrottled publish replay | 5,000,000 events in 247.773s; 20,179.722 events/s; p95 acknowledgement latency 48.661ms; 0 errors | same command | `044a4461fe88105db69b3add1a55ca08b6fb8df7` |
+| Canonical duplicate handling | 9,320,000 broker deliveries folded to 5,000,000 distinct Silver event IDs; 0 canonical duplicates and 0 quarantine rows | `./scripts/metrics/run.sh replay-failures` plus `benchmarking.verify_silver` | pipeline `32b2684371e1e118ac10bc68c491026e42e3051d`; verifier `d4d41636905db68380f9720b7d5ad936827ad3b6` |
+| Immutable Bronze batch replay | 28,066 Bronze data objects rebuilt to 5,000,000 duplicate-free canonical events in approximately 319s | same replay command | `d4d41636905db68380f9720b7d5ad936827ad3b6` |
+| Controlled service recovery | broker 12.022s including a 10s outage; Bronze consumer 31.401s including a 30s outage; Spark process restart 0.155s | same replay command | `d4d41636905db68380f9720b7d5ad936827ad3b6` |
+
+The service-recovery harness proves that each service returned to `running`; it does not infer row
+impact. The separate Silver verifier proves duplicate-free canonical outputs for the retained test
+corpus. BigQuery bytes scanned, dashboard query latency, Gold freshness, and live Jetstream
+disconnect recovery remain **TARGET** because this run did not create billed cloud resources or
+depend on the public network.
+
+Phase 6 functional validation executes 28 dbt models and 88 dbt data tests against the
 deterministic local warehouse fixture. Incremental reruns and a separate full refresh produce the
 same canonical fact/current-state counts. These are correctness checks, not performance results.
 
