@@ -132,6 +132,7 @@ services:
     volumes:
       - pipeline-data:/opt/atmospulse/data
       - spark-state:/opt/atmospulse/state
+      - ./benchmark/results:/opt/atmospulse/benchmark/results
     ports:
       - "9110:9110"
     restart: unless-stopped

@@ -29,7 +29,6 @@ SPARK_DUPLICATES = Counter(
     "Duplicate rows dropped by stateful operators",
     ["query_name"],
 )
-SPARK_QUARANTINED = Counter("spark_quarantined_rows_total", "Rows written to Silver quarantine")
 SPARK_STATE_ROWS = Gauge(
     "spark_state_store_rows", "Rows retained in Spark state operators", ["query_name"]
 )
@@ -75,8 +74,6 @@ class StructuredLoggingQueryListener(StreamingQueryListener):
         )
         if duplicates:
             SPARK_DUPLICATES.labels(name).inc(duplicates)
-        if name == "quarantine" and rows:
-            SPARK_QUARANTINED.inc(rows)
         maximum_event_time = progress_json.get("eventTime", {}).get("max")
         if maximum_event_time:
             maximum = datetime.fromisoformat(maximum_event_time.replace("Z", "+00:00"))

@@ -40,6 +40,10 @@ latest `(event_time, cursor)` mutation per AT URI; a latest delete produces `is_
   at-least-once custom-sink semantics and would require a separate transactional batch ledger.
 - Full overwrite is safe only for a new/rebuild target. Production promotion will use versioned
   GCS prefixes and a controlled manifest pointer, never in-place mutation of the active dataset.
+- Spark's file-sink progress reports source input rows, not filtered output rows. Operational
+  telemetry must not label that value as quarantine output. Exact quarantine and canonical counts
+  therefore come from the bounded Parquet verifier/reconciliation job; switching quarantine to a
+  custom `foreachBatch` counter was rejected because it would weaken the file sink's commit log.
 
 ## Schema decisions
 
