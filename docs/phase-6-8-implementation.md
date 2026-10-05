@@ -128,9 +128,11 @@ behavior, dashboards, alerts, and DAG contracts. The Airflow image and DAG impor
 configuration and 12 rules, Alertmanager configuration, Grafana JSON, and Compose file have been
 validated.
 
-This is functional correctness evidence, not a throughput or availability benchmark. Live GCP
-execution, dashboard query latency, alert delivery time, and SLO achievement remain unmeasured
-until credentials, infrastructure, and benchmark runs exist.
+This is functional correctness evidence, not a production availability benchmark. The 2026-10-05
+local drill subsequently measured Prometheus detection at 17.605 seconds and Alertmanager routing
+at 31.385 seconds. Live reconnect, Bronze latency, resource use, and local dashboard-query metrics
+are recorded in `docs/benchmark.md`. Live GCP execution, BigQuery dashboard latency, external
+notification delivery, and scheduled Airflow success remain blocked or unmeasured.
 
 ## Official implementation references
 

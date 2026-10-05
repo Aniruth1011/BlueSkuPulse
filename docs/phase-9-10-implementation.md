@@ -54,7 +54,8 @@ Bronze/Silver/Gold reconciliation and Spark/runtime resource measurements.
 
 ## Remaining operational prerequisites, not placeholders
 
-The code is complete, but measured production claims require an actual versioned environment:
-GCP credentials/project for Terraform and BigQuery, a Git commit, retained benchmark artifacts,
-and enough runtime to execute the specified workloads. Until then every SLO remains `TARGET` by
-policy. This is an evidence requirement, not missing pipeline logic.
+Local and live measurements are now recorded in `docs/benchmark.md`, including failed targets.
+Cloud-only claims still require renewed GCP authentication: BigQuery bytes/runtime and layout
+reduction, Gold freshness, deployed dashboard latency, Terraform plan/apply evidence, and scheduled
+Airflow success. These remain `BLOCKED` or `NOT MEASURED`; local DuckDB and DAG-import checks are
+not substitutes. This is an evidence requirement, not missing pipeline logic.

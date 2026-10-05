@@ -64,3 +64,24 @@ to “now.”
 
 If an expected alert does not fire, the scenario is incomplete even if data later recovers.
 
+## Measured 2026-10-05 results
+
+The public-v2 live run measured five deliberate 30-second network interruptions. Consumption
+reconnected from the persisted inclusive cursor in 31.804 seconds p50 and 32.837 seconds p95.
+Fifteen detected socket failures reconnected in 0.685 seconds p50 and 0.763 seconds p95 after
+detection. At-least-once overlap produced 15 duplicate deliveries in the bounded window; the
+subsequent exact-date batch replay folded all redeliveries to zero duplicate Silver IDs.
+
+The malformed-event drill sent 10,000 frames with every 100th frame invalid. Exactly 100 reached
+the DLQ, 9,900 reached the raw topic, and none disappeared. The additive-drift drill sent 10,000
+events with a previously unknown optional field; all 10,000 reached raw and none reached DLQ.
+
+An injected BigQuery-load-failure metric was detected by Prometheus in 17.605 seconds and routed
+to Alertmanager in 31.385 seconds. This validates local rule evaluation and routing, but not an
+external notification channel.
+
+The live Spark failure is retained as evidence: an old checkpoint forced the legacy heap-backed
+200-partition state store, causing nine restarts and no valid live Silver output. The independent
+batch rebuild recovered all 604,243 distinct date-partition IDs with zero duplicates and a 0.000%
+reconciliation delta. Operators must migrate or explicitly retire incompatible checkpoints during
+state-store configuration changes; silently reusing them is unsafe.

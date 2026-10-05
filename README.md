@@ -151,12 +151,19 @@ limitations, and artifact names are in [`docs/benchmark.md`](docs/benchmark.md).
 | Canonical duplicate handling | 9,320,000 broker deliveries folded to 5,000,000 distinct Silver event IDs; 0 canonical duplicates and 0 quarantine rows | `./scripts/metrics/run.sh replay-failures` plus `benchmarking.verify_silver` | pipeline `32b2684371e1e118ac10bc68c491026e42e3051d`; verifier `d4d41636905db68380f9720b7d5ad936827ad3b6` |
 | Immutable Bronze batch replay | 28,066 Bronze data objects rebuilt to 5,000,000 duplicate-free canonical events in approximately 319s | same replay command | `d4d41636905db68380f9720b7d5ad936827ad3b6` |
 | Controlled service recovery | broker 12.022s including a 10s outage; Bronze consumer 31.401s including a 30s outage; Spark process restart 0.155s | same replay command | `d4d41636905db68380f9720b7d5ad936827ad3b6` |
+| Live Jetstream v2 to Bronze | 505,195 deliveries in 15.57 min; ingest-to-Bronze p95 10.190s, but source-to-Bronze p95 294.116s (SLO failed) | bounded live run described in `docs/benchmark.md` | `8c9d35c` |
+| Forced live reconnect | five 30s outages; reconnect p50 31.804s and p95 32.837s | same live run | `8c9d35c` |
+| Live-date Bronze/Silver reconciliation | 604,266 raw deliveries, 604,243 distinct IDs, 604,243 Silver rows, 0 duplicates, 0 quarantine, 0.000% unexplained delta | batch replay plus `benchmarking.verify_silver` | `4c5c811` |
+| Malformed and additive-drift handling | 100/100 malformed frames reached DLQ; 10,000/10,000 additive-field events survived with 0 DLQ | isolated-topic injection described in `docs/benchmark.md` | `4c5c811` |
+| Critical alert detection | Prometheus fired in 17.605s; Alertmanager received in 31.385s | injected failure counter | `4c5c811` |
 
 The service-recovery harness proves that each service returned to `running`; it does not infer row
 impact. The separate Silver verifier proves duplicate-free canonical outputs for the retained test
-corpus. BigQuery bytes scanned, dashboard query latency, Gold freshness, and live Jetstream
-disconnect recovery remain **TARGET** because this run did not create billed cloud resources or
-depend on the public network.
+corpus. The live run passed reconnect and Bronze/Silver reconciliation targets but failed the
+source-to-Bronze latency target and failed to produce a valid streaming-Silver latency sample.
+BigQuery bytes scanned, BigQuery dashboard latency, Gold freshness, deployed Airflow success, and
+Terraform apply evidence remain **BLOCKED** because the configured GCP credential requires
+interactive reauthentication. Local DuckDB results are not used as substitutes.
 
 Phase 6 functional validation executes 28 dbt models and 88 dbt data tests against the
 deterministic local warehouse fixture. Incremental reruns and a separate full refresh produce the
