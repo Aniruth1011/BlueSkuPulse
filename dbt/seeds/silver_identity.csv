@@ -1,0 +1,2 @@
+event_id,did,event_kind,operation,event_time,ingested_at,payload_json,event_date
+e7,did:plc:alice,identity,identity,2026-10-04 18:06:00,2026-10-04 18:06:01,"{}",2026-10-04

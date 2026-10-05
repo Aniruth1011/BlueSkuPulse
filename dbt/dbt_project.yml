@@ -1,0 +1,38 @@
+name: atmospulse
+version: 1.0.0
+config-version: 2
+
+profile: atmospulse
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+clean-targets: ["target", "dbt_packages", "logs"]
+
+models:
+  atmospulse:
+    +persist_docs:
+      relation: true
+      columns: true
+    staging:
+      +materialized: view
+      +tags: [hourly, staging]
+    intermediate:
+      +materialized: incremental
+      +tags: [hourly, intermediate]
+    dimensions:
+      +materialized: table
+      +tags: [hourly, dimensions]
+    facts:
+      +materialized: incremental
+      +tags: [hourly, facts]
+    marts:
+      +materialized: incremental
+      +tags: [hourly, marts]
+
+seeds:
+  atmospulse:
+    +quote_columns: false
+    silver_posts:
+      +column_types:
+        languages: "varchar[]"

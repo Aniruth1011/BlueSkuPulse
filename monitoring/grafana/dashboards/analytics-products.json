@@ -1,0 +1,17 @@
+{
+  "uid": "atmospulse-analytics",
+  "title": "AtmosPulse Analytics Products",
+  "tags": ["atmospulse", "analytics"],
+  "timezone": "utc",
+  "schemaVersion": 41,
+  "refresh": "5m",
+  "time": {"from": "now-24h", "to": "now"},
+  "panels": [
+    {"id": 1, "type": "timeseries", "title": "Network activity", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}, "datasource": {"type": "grafana-bigquery-datasource", "uid": "atmospulse-bigquery"}, "targets": [{"refId": "A", "format": 0, "rawQuery": true, "rawSql": "SELECT activity_hour AS time, post_mutations, like_mutations, repost_mutations, follow_mutations FROM `atmospulse_analytics.mart_network_activity_hourly` WHERE $__timeFilter(activity_hour) ORDER BY activity_hour"}]},
+    {"id": 2, "type": "table", "title": "Rising topics (5 minute)", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}, "datasource": {"type": "grafana-bigquery-datasource", "uid": "atmospulse-bigquery"}, "targets": [{"refId": "A", "format": 1, "rawQuery": true, "rawSql": "SELECT topic, post_count, unique_authors, engagement, velocity, acceleration, anomaly_z_score, ranking_score FROM `atmospulse_analytics.mart_topic_velocity` WHERE window_minutes = 5 AND passes_spam_guardrail AND $__timeFilter(window_start) QUALIFY ROW_NUMBER() OVER (PARTITION BY topic ORDER BY window_start DESC) = 1 ORDER BY ranking_score DESC LIMIT 25"}]},
+    {"id": 3, "type": "table", "title": "Rising domains", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}, "datasource": {"type": "grafana-bigquery-datasource", "uid": "atmospulse-bigquery"}, "targets": [{"refId": "A", "format": 1, "rawQuery": true, "rawSql": "SELECT domain, shares, unique_sharers, engagement_per_share, outbound_link_share, velocity, acceleration FROM `atmospulse_analytics.mart_domain_velocity` WHERE $__timeFilter(activity_hour) QUALIFY ROW_NUMBER() OVER (PARTITION BY domain ORDER BY activity_hour DESC) = 1 ORDER BY velocity DESC LIMIT 25"}]},
+    {"id": 4, "type": "table", "title": "Creator activity", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}, "datasource": {"type": "grafana-bigquery-datasource", "uid": "atmospulse-bigquery"}, "targets": [{"refId": "A", "format": 1, "rawQuery": true, "rawSql": "SELECT activity_date, actor_did, posts, engagement_received, engagement_per_post, observed_follow_edges, rolling_7d_posts FROM `atmospulse_analytics.mart_creator_growth` ORDER BY activity_date DESC, engagement_received DESC LIMIT 100"}]},
+    {"id": 5, "type": "table", "title": "Post engagement", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}, "datasource": {"type": "grafana-bigquery-datasource", "uid": "atmospulse-bigquery"}, "targets": [{"refId": "A", "format": 1, "rawQuery": true, "rawSql": "SELECT post_uri, author_did, like_count, repost_count, reply_count, quote_count, total_engagement FROM `atmospulse_analytics.mart_post_engagement` ORDER BY total_engagement DESC LIMIT 100"}]},
+    {"id": 6, "type": "table", "title": "Conversation health", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}, "datasource": {"type": "grafana-bigquery-datasource", "uid": "atmospulse-bigquery"}, "targets": [{"refId": "A", "format": 1, "rawQuery": true, "rawSql": "SELECT root_uri, reply_count, unique_participants, max_reply_depth, average_branching_factor, time_to_first_reply_seconds, observed_duration_seconds, orphan_reply_count FROM `atmospulse_analytics.mart_conversation_health` ORDER BY reply_count DESC LIMIT 100"}]}
+  ]
+}

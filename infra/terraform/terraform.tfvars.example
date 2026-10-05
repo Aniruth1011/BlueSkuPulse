@@ -1,0 +1,15 @@
+project_id          = "replace-with-gcp-project"
+region              = "us-west1"
+bigquery_location   = "US"
+environment         = "dev"
+resource_prefix     = "replace-with-globally-unique-prefix"
+bronze_retention_days = 365
+silver_retention_days = 90
+force_destroy_nonprod = false
+alert_email         = ""
+
+labels = {
+  owner       = "data-platform"
+  cost_center = "engineering"
+}
+

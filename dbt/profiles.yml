@@ -1,0 +1,17 @@
+atmospulse:
+  target: "{{ env_var('ATMOSPULSE_DBT_TARGET', 'duckdb') }}"
+  outputs:
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('ATMOSPULSE_DUCKDB_PATH', '/tmp/atmospulse-dbt.duckdb') }}"
+      schema: main
+      threads: 4
+    bigquery:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('ATMOSPULSE_BQ_PROJECT') }}"
+      dataset: "{{ env_var('ATMOSPULSE_BQ_ANALYTICS_DATASET', 'atmospulse_analytics') }}"
+      location: "{{ env_var('ATMOSPULSE_BQ_LOCATION', 'US') }}"
+      threads: 4
+      job_execution_timeout_seconds: 600
+      job_retries: 2

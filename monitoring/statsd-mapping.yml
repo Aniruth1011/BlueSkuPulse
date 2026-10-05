@@ -1,0 +1,5 @@
+mappings:
+  - match: "airflow.ti_failures"
+    name: "airflow_ti_failures"
+  - match: "airflow.ti_successes"
+    name: "airflow_ti_successes"

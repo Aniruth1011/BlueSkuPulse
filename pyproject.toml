@@ -1,0 +1,65 @@
+[project]
+name = "atmospulse"
+version = "0.1.0"
+description = "Production-style Bluesky/AT Protocol real-time data platform"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "aiokafka>=0.12,<1",
+  "google-cloud-bigquery>=3.38,<4",
+  "google-cloud-storage>=3.1,<3.2",
+  "prometheus-client>=0.22,<1",
+  "pydantic>=2.12,<3",
+  "pyspark==4.0.4",
+  "websockets>=15,<17",
+]
+
+[dependency-groups]
+dev = [
+  "dbt-bigquery>=1.10,<2",
+  "dbt-core>=1.10,<2",
+  "dbt-duckdb>=1.10,<2",
+  "mypy>=1.18,<2",
+  "pytest>=8.4,<10",
+  "pytest-asyncio>=1.2,<2",
+  "pytest-cov>=7,<8",
+  "ruff>=0.14,<1",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers --strict-config"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["tests/fixtures"]
+
+[[tool.mypy.overrides]]
+module = "aiokafka.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "google.cloud.*"
+ignore_missing_imports = true
+
+[tool.coverage.run]
+branch = true
+source = ["ingestion"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true

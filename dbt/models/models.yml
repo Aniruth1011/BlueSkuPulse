@@ -1,0 +1,301 @@
+version: 2
+
+models:
+  - name: stg_events
+    description: Deduplicated valid Silver mutations at one row per event_id.
+    columns:
+      - name: event_id
+        description: Deterministic source mutation identity and model grain.
+        data_tests: [not_null, unique]
+      - name: event_kind
+        description: Commit or account lifecycle category.
+        data_tests:
+          - accepted_values:
+              arguments: {values: [commit, identity, account, sync]}
+      - name: operation
+        description: Mutation operation or lifecycle category.
+        data_tests: [not_null]
+      - name: did
+        description: Actor or repository decentralized identifier.
+        data_tests: [not_null]
+      - name: event_date
+        description: UTC source-event partition date.
+        data_tests: [not_null]
+
+  - name: stg_posts
+    description: Deduplicated post mutations at one row per event_id.
+    columns:
+      - name: event_id
+        description: Deterministic mutation identity.
+        data_tests: [not_null, unique]
+      - name: at_uri
+        description: Logical post record identifier.
+        data_tests: [not_null]
+      - name: author_did
+        description: DID of the post author.
+        data_tests: [not_null]
+      - name: operation
+        description: Create, update, or delete operation.
+        data_tests:
+          - accepted_values:
+              arguments: {values: [create, update, delete]}
+
+  - name: stg_likes
+    description: Deduplicated like mutations at one row per event_id.
+    columns:
+      - name: event_id
+        description: Deterministic mutation identity.
+        data_tests: [not_null, unique]
+      - name: at_uri
+        description: Logical like record identifier.
+        data_tests: [not_null]
+      - name: actor_did
+        description: DID that created or deleted the like.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: "ref('dim_actor')", field: did}
+
+  - name: stg_reposts
+    description: Deduplicated repost mutations at one row per event_id.
+    columns:
+      - name: event_id
+        description: Deterministic mutation identity.
+        data_tests: [not_null, unique]
+      - name: at_uri
+        description: Logical repost record identifier.
+        data_tests: [not_null]
+
+  - name: stg_follows
+    description: Deduplicated follow mutations at one row per event_id.
+    columns:
+      - name: event_id
+        description: Deterministic mutation identity.
+        data_tests: [not_null, unique]
+      - name: at_uri
+        description: Logical follow record identifier.
+        data_tests: [not_null]
+
+  - name: stg_identity
+    description: Deduplicated identity, account, and sync events at event_id grain.
+    columns:
+      - name: event_id
+        description: Deterministic lifecycle-event identity.
+        data_tests: [not_null, unique]
+      - name: did
+        description: Account DID affected by the lifecycle event.
+        data_tests: [not_null]
+
+  - name: stg_quarantine
+    description: Silver envelopes rejected by canonical quality checks.
+    columns:
+      - name: event_id
+        description: Deterministic identity of the rejected envelope.
+        data_tests: [not_null]
+      - name: event_date
+        description: UTC quarantine partition date.
+        data_tests: [not_null]
+
+  - name: int_post_current_state
+    description: Latest known post mutation per AT URI, including deleted records.
+    columns:
+      - name: at_uri
+        description: Current-state model grain.
+        data_tests: [not_null, unique]
+      - name: is_deleted
+        description: True when the latest mutation is a delete.
+        data_tests: [not_null]
+
+  - name: int_engagement_current_state
+    description: Latest known like or repost mutation per AT URI.
+    columns:
+      - name: at_uri
+        description: Current-state engagement grain.
+        data_tests: [not_null, unique]
+      - name: engagement_type
+        description: Like or repost.
+        data_tests:
+          - accepted_values:
+              arguments: {values: [like, repost]}
+
+  - name: int_follow_current_state
+    description: Latest known follow mutation per AT URI.
+    columns:
+      - name: at_uri
+        description: Current-state follow grain.
+        data_tests: [not_null, unique]
+
+  - name: dim_actor
+    description: One row per observed actor DID with first and last observation time.
+    columns:
+      - name: did
+        description: Dimension primary key.
+        data_tests: [not_null, unique]
+
+  - name: dim_date
+    description: Calendar attributes for dates observed in the event stream.
+    columns:
+      - name: date_day
+        description: Date dimension primary key.
+        data_tests: [not_null, unique]
+
+  - name: dim_hour
+    description: Hour-of-day dimension for zero through twenty-three.
+    columns:
+      - name: hour_number
+        description: Hour dimension primary key.
+        data_tests: [not_null, unique]
+
+  - name: dim_language
+    description: Languages observed on post mutations and their observed volume.
+    columns:
+      - name: language_code
+        description: BCP-47 language code as supplied by the source.
+        data_tests: [not_null, unique]
+
+  - name: dim_domain
+    description: Normalized external-link domains observed on posts.
+    columns:
+      - name: domain
+        description: Lowercase hostname without a leading www.
+        data_tests: [not_null, unique]
+
+  - name: fct_posts
+    description: One latest canonical post per AT URI, including deletion state.
+    columns:
+      - name: at_uri
+        description: Fact grain and logical post key.
+        data_tests: [not_null, unique]
+      - name: author_did
+        description: Post author DID.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: "ref('dim_actor')", field: did}
+
+  - name: fct_likes
+    description: One latest canonical like per AT URI, including deletion state.
+    columns:
+      - name: at_uri
+        description: Fact grain and logical like key.
+        data_tests: [not_null, unique]
+
+  - name: fct_reposts
+    description: One latest canonical repost per AT URI, including deletion state.
+    columns:
+      - name: at_uri
+        description: Fact grain and logical repost key.
+        data_tests: [not_null, unique]
+
+  - name: fct_follows
+    description: One latest canonical follow edge per AT URI, including deletion state.
+    columns:
+      - name: at_uri
+        description: Fact grain and logical follow key.
+        data_tests: [not_null, unique]
+
+  - name: fct_post_engagement
+    description: Engagement counts at one row per canonical post URI.
+    columns:
+      - name: post_uri
+        description: Engagement fact grain.
+        data_tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments: {to: "ref('fct_posts')", field: at_uri}
+
+  - name: mart_network_activity_hourly
+    description: Network event and active-actor counts at hourly grain.
+    columns:
+      - name: activity_hour
+        description: UTC hour and mart grain.
+        data_tests: [not_null, unique]
+
+  - name: mart_topic_velocity
+    description: Five, fifteen, and sixty-minute hashtag velocity, acceleration, anomaly, engagement, and spam safeguards.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [window_start, window_minutes, topic]
+    columns:
+      - name: window_start
+        description: Start of the five-minute UTC window.
+        data_tests: [not_null]
+      - name: topic
+        description: Normalized lowercase hashtag.
+        data_tests: [not_null]
+      - name: window_minutes
+        description: Window width; supported values are 5, 15, and 60 minutes.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: [5, 15, 60]}
+      - name: passes_spam_guardrail
+        description: Whether author diversity and concentration checks pass.
+        data_tests: [not_null]
+
+  - name: mart_domain_velocity
+    description: Hourly domain sharing, engagement, velocity, outbound share, and sharer concentration.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [activity_hour, domain]
+    columns:
+      - name: domain
+        description: Normalized external hostname.
+        data_tests: [not_null]
+
+  - name: mart_creator_growth
+    description: Daily and rolling seven-day creator posting, engagement, and observed follow-edge activity.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [activity_date, actor_did]
+    columns:
+      - name: actor_did
+        description: Creator DID.
+        data_tests: [not_null]
+
+  - name: mart_post_engagement
+    description: Dashboard-ready post engagement counts at post URI grain.
+    columns:
+      - name: post_uri
+        description: Mart primary key.
+        data_tests: [not_null, unique]
+
+  - name: mart_conversation_health
+    description: Conversation depth, branching, participants, response time, duration, and orphan handling at root grain.
+    columns:
+      - name: root_uri
+        description: Root post URI and mart grain.
+        data_tests: [not_null, unique]
+      - name: max_reply_depth
+        description: Deepest reconstructable reply path, capped at 100 to contain corrupt cycles.
+      - name: orphan_reply_count
+        description: Replies whose parent chain cannot be reconstructed from observed posts.
+        data_tests: [not_null]
+
+  - name: mart_language_activity_hourly
+    description: Hourly post and unique-author distribution by source-supplied language code.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [activity_hour, language_code]
+    columns:
+      - name: activity_hour
+        description: UTC activity hour.
+        data_tests: [not_null]
+      - name: language_code
+        description: Source-supplied BCP-47 language code.
+        data_tests: [not_null]
+
+  - name: mart_pipeline_health
+    description: Daily Silver-to-warehouse counts and explained reconciliation delta.
+    columns:
+      - name: event_date
+        description: UTC reconciliation date and mart grain.
+        data_tests: [not_null, unique]
+      - name: reconciliation_delta_ratio
+        description: Unexplained difference divided by distinct Silver events.
+        data_tests: [not_null]

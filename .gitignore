@@ -1,0 +1,38 @@
+.env
+.coverage
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local runtime state and generated lake data
+state/
+data/
+spark-warehouse/
+
+# Local tooling
+.DS_Store
+
+# dbt build output and local warehouse files
+dbt/dbt_packages/
+dbt/logs/
+dbt/target/
+*.duckdb
+
+# Generated evidence is retained by CI/artifact storage, not committed accidentally.
+benchmark/results/*
+!benchmark/results/.gitkeep
+
+# Local benchmark/cloud configuration.
+scripts/metrics/metrics.env
+atmospulse-metrics-*.tar.gz
+
+# Local Terraform state and plans may contain sensitive metadata.
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/*.tfplan
+infra/terraform/terraform.tfvars
+infra/terraform/backend.tf

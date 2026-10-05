@@ -1,0 +1,304 @@
+name: atmospulse
+
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.3
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr=internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr=internal://redpanda:8082,external://localhost:18082
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+    ports:
+      - "19092:19092"
+      - "19644:9644"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health --exit-when-healthy"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  topic-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.3
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/bash"]
+    command:
+      - -ec
+      - |
+        for topic in bluesky.raw.events bluesky.posts bluesky.engagements bluesky.graph bluesky.identity bluesky.dlq; do
+          rpk topic create "$${topic}" --brokers redpanda:9092 --partitions 6 --replicas 1 \
+            --topic-config retention.ms=604800000 || true
+        done
+        rpk cluster config set enable_consumer_group_metrics '["group","partition","consumer_lag"]' \
+          -X admin.hosts=redpanda:9644
+    restart: "no"
+
+  console:
+    image: docker.redpanda.com/redpandadata/console:v3.12.0
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+    entrypoint: /bin/sh
+    command: -c 'echo "$${CONSOLE_CONFIG_FILE}" > /tmp/config.yml && /app/console'
+    ports:
+      - "8080:8080"
+
+  ingestion:
+    profiles: [pipeline]
+    image: atmospulse-ingestion:local
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      target: ingestion
+    depends_on:
+      topic-init:
+        condition: service_completed_successfully
+    environment:
+      ATMOSPULSE_SOURCE: ${ATMOSPULSE_SOURCE:-fixture}
+      ATMOSPULSE_FIXTURE_PATH: /opt/atmospulse/tests/fixtures/jetstream_v2.jsonl
+      ATMOSPULSE_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      ATMOSPULSE_CURSOR_PATH: /opt/atmospulse/state/cursor.json
+      ATMOSPULSE_METRICS_PORT: "9108"
+      ATMOSPULSE_LOG_LEVEL: ${ATMOSPULSE_LOG_LEVEL:-INFO}
+    volumes:
+      - ./tests/fixtures:/opt/atmospulse/tests/fixtures:ro
+      - ingestion-state:/opt/atmospulse/state
+    ports:
+      - "9108:9108"
+    # FixtureSource is bounded and should exit cleanly; live sources reconnect internally.
+    restart: on-failure
+
+  bronze:
+    profiles: [pipeline]
+    image: atmospulse-bronze:local
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      target: bronze
+    depends_on:
+      topic-init:
+        condition: service_completed_successfully
+    environment:
+      ATMOSPULSE_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      ATMOSPULSE_BRONZE_BACKEND: local
+      ATMOSPULSE_BRONZE_ROOT: /opt/atmospulse/data/bronze
+      ATMOSPULSE_BRONZE_METRICS_PORT: "9109"
+      ATMOSPULSE_LOG_LEVEL: ${ATMOSPULSE_LOG_LEVEL:-INFO}
+    volumes:
+      - pipeline-data:/opt/atmospulse/data
+    ports:
+      - "9109:9109"
+    restart: unless-stopped
+
+  spark:
+    profiles: [pipeline]
+    image: atmospulse-spark:local
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      target: spark
+    depends_on:
+      topic-init:
+        condition: service_completed_successfully
+    environment:
+      ATMOSPULSE_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      ATMOSPULSE_SILVER_ROOT: /opt/atmospulse/data/silver
+      ATMOSPULSE_SPARK_CHECKPOINT_ROOT: /opt/atmospulse/state/spark-checkpoints
+      ATMOSPULSE_SPARK_METRICS_PORT: "9110"
+      ATMOSPULSE_LOG_LEVEL: ${ATMOSPULSE_LOG_LEVEL:-INFO}
+    volumes:
+      - pipeline-data:/opt/atmospulse/data
+      - spark-state:/opt/atmospulse/state
+    ports:
+      - "9110:9110"
+    restart: unless-stopped
+
+  postgres:
+    profiles: [orchestration]
+    image: postgres:16.10-alpine
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:-}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  airflow-init:
+    image: atmospulse-airflow:3.1.7
+    profiles: [orchestration]
+    build:
+      context: .
+      dockerfile: docker/airflow.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: &airflow-environment
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/atmospulse/airflow/dags
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD:-}@postgres/airflow
+      AIRFLOW__API__BASE_URL: http://airflow-api-server:8080
+      AIRFLOW__SCHEDULER__HEALTH_CHECK_ENABLED: "true"
+      AIRFLOW__METRICS__STATSD_ON: "true"
+      AIRFLOW__METRICS__STATSD_HOST: airflow-statsd-exporter
+      AIRFLOW__METRICS__STATSD_PORT: "9125"
+      AIRFLOW__METRICS__STATSD_PREFIX: airflow
+      AIRFLOW__METRICS__METRICS_ALLOW_LIST: scheduler,executor,dagrun,ti,operator
+      ATMOSPULSE_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      ATMOSPULSE_BRONZE_BACKEND: ${ATMOSPULSE_BRONZE_BACKEND:-local}
+      ATMOSPULSE_BRONZE_ROOT: /opt/airflow/atmospulse/data/bronze
+      ATMOSPULSE_BRONZE_GCS_BUCKET: ${ATMOSPULSE_BRONZE_GCS_BUCKET:-}
+      ATMOSPULSE_SILVER_ROOT: ${ATMOSPULSE_SILVER_ROOT:-/opt/airflow/atmospulse/data/silver}
+      ATMOSPULSE_BACKFILL_BRONZE_PATH: ${ATMOSPULSE_BACKFILL_BRONZE_PATH:-/opt/airflow/atmospulse/data/bronze/bluesky/event_date=*/event_hour=*/collection=*/*.jsonl.gz}
+      ATMOSPULSE_SPARK_EXTRA_PACKAGES: ${ATMOSPULSE_SPARK_EXTRA_PACKAGES:-com.google.cloud.bigdataoss:gcs-connector:hadoop3-3.1.18}
+      ATMOSPULSE_BQ_PROJECT: ${ATMOSPULSE_BQ_PROJECT:-}
+      ATMOSPULSE_BQ_LOCATION: ${ATMOSPULSE_BQ_LOCATION:-US}
+      ATMOSPULSE_BQ_STAGING_DATASET: ${ATMOSPULSE_BQ_STAGING_DATASET:-atmospulse_staging}
+      ATMOSPULSE_BQ_ANALYTICS_DATASET: ${ATMOSPULSE_BQ_ANALYTICS_DATASET:-atmospulse_analytics}
+      ATMOSPULSE_BQ_MONITORING_DATASET: ${ATMOSPULSE_BQ_MONITORING_DATASET:-atmospulse_monitoring}
+      ATMOSPULSE_DBT_TARGET: ${ATMOSPULSE_DBT_TARGET:-bigquery}
+      ATMOSPULSE_PUSHGATEWAY_URL: http://pushgateway:9091
+    volumes: &airflow-volumes
+      - .:/opt/airflow/atmospulse
+      - airflow-logs:/opt/airflow/logs
+    command: db migrate
+
+  airflow-api-server:
+    image: atmospulse-airflow:3.1.7
+    profiles: [orchestration]
+    build:
+      context: .
+      dockerfile: docker/airflow.Dockerfile
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-environment
+    volumes: *airflow-volumes
+    command: api-server
+    ports:
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  airflow-scheduler:
+    image: atmospulse-airflow:3.1.7
+    profiles: [orchestration]
+    build:
+      context: .
+      dockerfile: docker/airflow.Dockerfile
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      airflow-api-server:
+        condition: service_healthy
+    environment: *airflow-environment
+    volumes: *airflow-volumes
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --local"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+
+  airflow-dag-processor:
+    image: atmospulse-airflow:3.1.7
+    profiles: [orchestration]
+    build:
+      context: .
+      dockerfile: docker/airflow.Dockerfile
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-environment
+    volumes: *airflow-volumes
+    command: dag-processor
+
+  airflow-statsd-exporter:
+    profiles: [orchestration, observability]
+    image: prom/statsd-exporter:v0.28.0
+    command: ["--statsd.listen-udp=:9125", "--web.listen-address=:9102", "--statsd.mapping-config=/etc/statsd/mapping.yml"]
+    volumes:
+      - ./monitoring/statsd-mapping.yml:/etc/statsd/mapping.yml:ro
+
+  pushgateway:
+    profiles: [orchestration, observability]
+    image: prom/pushgateway:v1.11.1
+
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.5.5
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts:/etc/prometheus/alerts:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  alertmanager:
+    profiles: [observability]
+    image: prom/alertmanager:v0.28.1
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:12.2.5
+    depends_on:
+      - prometheus
+    environment:
+      GF_INSTALL_PLUGINS: grafana-bigquery-datasource 3.4.2
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      ATMOSPULSE_BQ_PROJECT: ${ATMOSPULSE_BQ_PROJECT:-}
+      ATMOSPULSE_BQ_LOCATION: ${ATMOSPULSE_BQ_LOCATION:-US}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+
+volumes:
+  redpanda-data:
+  ingestion-state:
+  pipeline-data:
+  spark-state:
+  airflow-db:
+  airflow-logs:
+  prometheus-data:
+  grafana-data:

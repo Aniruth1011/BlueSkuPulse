@@ -1,0 +1,19 @@
+{
+  "uid": "atmospulse-health",
+  "title": "AtmosPulse Platform Health",
+  "tags": ["atmospulse", "operations"],
+  "timezone": "utc",
+  "schemaVersion": 41,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {"id": 1, "type": "timeseries", "title": "Received and durable events / sec", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum(rate(bluesky_events_received_total[5m]))", "legendFormat": "received"}, {"refId": "B", "expr": "sum(rate(bluesky_events_published_total[5m]))", "legendFormat": "Kafka acknowledged"}]},
+    {"id": 2, "type": "timeseries", "title": "Ingestion lag percentiles", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(bluesky_ingestion_lag_seconds_bucket[5m])))", "legendFormat": "p50"}, {"refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(bluesky_ingestion_lag_seconds_bucket[5m])))", "legendFormat": "p95"}, {"refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(bluesky_ingestion_lag_seconds_bucket[5m])))", "legendFormat": "p99"}]},
+    {"id": 3, "type": "stat", "title": "Cursor checkpoint age", "gridPos": {"h": 5, "w": 6, "x": 0, "y": 8}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "bluesky_cursor_checkpoint_age_seconds"}]},
+    {"id": 4, "type": "stat", "title": "Max Kafka lag", "gridPos": {"h": 5, "w": 6, "x": 6, "y": 8}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "max(redpanda_kafka_consumer_group_lag_max)"}]},
+    {"id": 5, "type": "stat", "title": "DLQ rate", "gridPos": {"h": 5, "w": 6, "x": 12, "y": 8}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum(rate(bluesky_events_dlq_total[10m])) / clamp_min(sum(rate(bluesky_events_received_total[10m])), 1)"}]},
+    {"id": 6, "type": "stat", "title": "Reconciliation delta", "gridPos": {"h": 5, "w": 6, "x": 18, "y": 8}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "reconciliation_delta_ratio"}]},
+    {"id": 7, "type": "timeseries", "title": "Spark input vs processing rate", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum(spark_input_rows_per_second)", "legendFormat": "input"}, {"refId": "B", "expr": "sum(spark_processed_rows_per_second)", "legendFormat": "processed"}]},
+    {"id": 8, "type": "timeseries", "title": "Reconnects and load failures", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum(increase(bluesky_websocket_reconnects_total[1h]))", "legendFormat": "reconnects"}, {"refId": "B", "expr": "sum(increase(bq_load_failures_total[1h]))", "legendFormat": "BQ failures"}, {"refId": "C", "expr": "sum(increase(airflow_ti_failures[1h]))", "legendFormat": "Airflow failures"}]}
+  ]
+}

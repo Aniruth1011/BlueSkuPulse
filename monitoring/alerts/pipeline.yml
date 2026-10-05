@@ -1,0 +1,71 @@
+groups:
+  - name: atmospulse-critical
+    rules:
+      - alert: SourceEventsSilent
+        expr: absent(bluesky_events_received_total) or sum(rate(bluesky_events_received_total[5m])) == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: No Bluesky source events have been observed for five minutes
+      - alert: IngestionP95AboveSLO
+        expr: histogram_quantile(0.95, sum by (le) (rate(bluesky_ingestion_lag_seconds_bucket[5m]))) > 15
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: Source-to-ingestion p95 exceeds the 15 second target
+      - alert: CursorCheckpointStale
+        expr: bluesky_cursor_checkpoint_age_seconds > 300
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: Durable source cursor has not advanced for five minutes
+      - alert: KafkaConsumerLagHigh
+        expr: max(redpanda_kafka_consumer_group_lag_max) > 10000
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: A Redpanda consumer group is more than 10,000 records behind
+      - alert: DLQRateHigh
+        expr: sum(rate(bluesky_events_dlq_total[10m])) / clamp_min(sum(rate(bluesky_events_received_total[10m])), 1) > 0.01
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: More than one percent of received events are entering the DLQ
+      - alert: BronzeStale
+        expr: time() - bronze_freshness_timestamp_seconds > 900
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: No durable Bronze batch has landed within fifteen minutes
+      - alert: SparkBatchSlow
+        expr: histogram_quantile(0.95, sum by (le) (rate(spark_batch_duration_seconds_bucket[15m]))) > 30
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: Spark micro-batch p95 duration exceeds its 30 second trigger
+      - alert: BigQueryLoadFailure
+        expr: increase(bq_load_failures_total[15m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: A Silver-to-BigQuery load failed
+      - alert: GoldFreshnessAboveSLO
+        expr: time() - dbt_last_success_timestamp_seconds > 600
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: Gold marts have not completed successfully within ten minutes
+      - alert: DbtCriticalTestFailure
+        expr: dbt_test_failures > 0
+        labels: {severity: critical}
+        annotations:
+          summary: One or more dbt tests failed in the latest build
+      - alert: ReconciliationDeltaAboveSLO
+        expr: reconciliation_delta_ratio > 0.001
+        labels: {severity: critical}
+        annotations:
+          summary: Unexplained cross-layer delta exceeds 0.1 percent
+      - alert: AirflowTaskFailure
+        expr: increase(airflow_ti_failures[15m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: An Airflow task failed

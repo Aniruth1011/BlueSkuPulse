@@ -1,0 +1,9 @@
+event_id,source_version,source_host,cursor,event_kind,operation,did,collection,rkey,at_uri,cid,event_time,ingested_at,payload_json,schema_version,event_date
+e1,jetstream_v2,fixture.local,101,commit,create,did:plc:alice,app.bsky.feed.post,p1,at://did:plc:alice/app.bsky.feed.post/p1,cid1,2026-10-04 18:00:00,2026-10-04 18:00:01,"{}",1,2026-10-04
+e2,jetstream_v2,fixture.local,102,commit,create,did:plc:bob,app.bsky.feed.like,l1,at://did:plc:bob/app.bsky.feed.like/l1,cid2,2026-10-04 18:01:00,2026-10-04 18:01:01,"{}",1,2026-10-04
+e3,jetstream_v2,fixture.local,103,commit,update,did:plc:alice,app.bsky.feed.post,p1,at://did:plc:alice/app.bsky.feed.post/p1,cid3,2026-10-04 18:02:00,2026-10-04 18:02:01,"{}",1,2026-10-04
+e4,jetstream_v2,fixture.local,104,commit,delete,did:plc:bob,app.bsky.feed.like,l1,at://did:plc:bob/app.bsky.feed.like/l1,,2026-10-04 18:03:00,2026-10-04 18:03:01,"{}",1,2026-10-04
+e5,jetstream_v2,fixture.local,105,commit,create,did:plc:carol,app.bsky.feed.repost,r1,at://did:plc:carol/app.bsky.feed.repost/r1,cid5,2026-10-04 18:04:00,2026-10-04 18:04:01,"{}",1,2026-10-04
+e6,jetstream_v2,fixture.local,106,commit,create,did:plc:alice,app.bsky.graph.follow,f1,at://did:plc:alice/app.bsky.graph.follow/f1,cid6,2026-10-04 18:05:00,2026-10-04 18:05:01,"{}",1,2026-10-04
+e7,jetstream_v2,fixture.local,107,identity,identity,did:plc:alice,,,,,2026-10-04 18:06:00,2026-10-04 18:06:01,"{}",1,2026-10-04
+e8,jetstream_v2,fixture.local,108,commit,create,did:plc:bob,app.bsky.feed.post,p2,at://did:plc:bob/app.bsky.feed.post/p2,cid8,2026-10-04 18:07:00,2026-10-04 18:07:01,"{}",1,2026-10-04

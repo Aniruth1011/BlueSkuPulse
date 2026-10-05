@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: silver
+    description: Canonical Silver Parquet datasets loaded idempotently into BigQuery.
+    schema: "{{ env_var('ATMOSPULSE_BQ_STAGING_DATASET', target.schema) }}"
+    config:
+      loaded_at_field: ingested_at
+      freshness:
+        warn_after: {count: 15, period: minute}
+        error_after: {count: 1, period: hour}
+    tables:
+      - name: silver_events
+        description: Valid immutable event mutations at event_id grain.
+      - name: silver_posts
+        description: Normalized post mutations at event_id grain.
+      - name: silver_engagements
+        description: Normalized like and repost mutations at event_id grain.
+      - name: silver_graph_edges
+        description: Normalized follow mutations at event_id grain.
+      - name: silver_identity
+        description: Identity, account, and sync lifecycle events.
+      - name: silver_quarantine
+        description: Envelopes rejected by canonical Silver quality checks.

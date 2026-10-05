@@ -1,0 +1,9 @@
+# Copy to backend.tf only after creating the state bucket through a separately controlled
+# bootstrap process. Never commit credentials or a production bucket name.
+terraform {
+  backend "gcs" {
+    bucket = "replace-with-terraform-state-bucket"
+    prefix = "atmospulse/dev"
+  }
+}
+

@@ -1,0 +1,4 @@
+event_id,at_uri,actor_did,engagement_type,operation,subject_uri,subject_cid,event_time,ingested_at,record_created_at,event_date
+e2,at://did:plc:bob/app.bsky.feed.like/l1,did:plc:bob,like,create,at://did:plc:alice/app.bsky.feed.post/p1,cid1,2026-10-04 18:01:00,2026-10-04 18:01:01,2026-10-04 18:01:00,2026-10-04
+e4,at://did:plc:bob/app.bsky.feed.like/l1,did:plc:bob,like,delete,at://did:plc:alice/app.bsky.feed.post/p1,cid1,2026-10-04 18:03:00,2026-10-04 18:03:01,,2026-10-04
+e5,at://did:plc:carol/app.bsky.feed.repost/r1,did:plc:carol,repost,create,at://did:plc:alice/app.bsky.feed.post/p1,cid1,2026-10-04 18:04:00,2026-10-04 18:04:01,2026-10-04 18:04:00,2026-10-04

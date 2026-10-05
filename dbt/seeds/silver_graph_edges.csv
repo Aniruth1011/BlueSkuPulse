@@ -1,0 +1,2 @@
+event_id,at_uri,actor_did,subject_did,operation,event_time,ingested_at,record_created_at,event_date
+e6,at://did:plc:alice/app.bsky.graph.follow/f1,did:plc:alice,did:plc:bob,create,2026-10-04 18:05:00,2026-10-04 18:05:01,2026-10-04 18:05:00,2026-10-04

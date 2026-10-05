@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python, contracts, Spark
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+          enable-cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: uv sync --frozen --dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy ingestion bronze streaming warehouse batch benchmarking reliability
+      - run: uv run pytest --cov=ingestion --cov-report=term-missing
+
+  dbt:
+    name: dbt compile, tests, idempotent rerun
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+          enable-cache: true
+      - run: uv sync --frozen --dev
+      - run: uv run dbt deps --project-dir dbt --profiles-dir dbt
+      - run: uv run dbt seed --full-refresh --project-dir dbt --profiles-dir dbt
+      - run: uv run dbt compile --project-dir dbt --profiles-dir dbt
+      - run: uv run dbt build --full-refresh --exclude resource_type:seed --project-dir dbt --profiles-dir dbt
+      - run: uv run dbt build --exclude resource_type:seed --project-dir dbt --profiles-dir dbt
+      - run: uv run dbt docs generate --project-dir dbt --profiles-dir dbt
+
+  terraform:
+    name: Terraform format and validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.13.3"
+      - run: terraform -chdir=infra/terraform fmt -check -recursive
+      - run: terraform -chdir=infra/terraform init -backend=false
+      - run: terraform -chdir=infra/terraform validate
+
+  docker:
+    name: Build ${{ matrix.image }} image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ingestion
+            dockerfile: docker/app.Dockerfile
+            target: ingestion
+          - image: bronze
+            dockerfile: docker/app.Dockerfile
+            target: bronze
+          - image: spark
+            dockerfile: docker/app.Dockerfile
+            target: spark
+          - image: warehouse
+            dockerfile: docker/app.Dockerfile
+            target: warehouse
+          - image: airflow
+            dockerfile: docker/airflow.Dockerfile
+            target: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          push: false
+          tags: atmospulse-${{ matrix.image }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
