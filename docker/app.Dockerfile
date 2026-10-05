@@ -27,6 +27,7 @@ COPY bronze bronze
 COPY streaming streaming
 COPY warehouse warehouse
 COPY batch batch
+COPY benchmarking benchmarking
 COPY dbt dbt
 RUN mkdir -p /opt/atmospulse/state /opt/atmospulse/data \
     && chown -R atmospulse:atmospulse /opt/atmospulse
@@ -48,4 +49,3 @@ CMD ["python", "-m", "streaming.jobs.normalize_events", "--mode", "stream"]
 
 FROM runtime AS warehouse
 CMD ["python", "-m", "warehouse.loader", "--help"]
-
