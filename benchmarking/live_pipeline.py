@@ -107,7 +107,7 @@ def analyze_bronze(root: Path, start: datetime, end: datetime) -> dict[str, Any]
 
 
 def analyze_silver(root: Path, start: datetime, end: datetime) -> dict[str, Any]:
-    import pyarrow.parquet as pq
+    import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
     latencies: list[float] = []
     processing_delays: list[float] = []
