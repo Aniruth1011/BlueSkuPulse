@@ -28,13 +28,16 @@ uv run python scripts/run_failure_tests.py --include-dbt-failure
 
 log "Injecting a broker outage"
 uv run python -m reliability.compose_scenarios broker-outage \
-  --outage-seconds "${BROKER_OUTAGE_SECONDS:-10}"
+  --outage-seconds "${BROKER_OUTAGE_SECONDS:-10}" \
+  --output "benchmark/results/failure-broker-${BENCH_SHA}.json"
 
 log "Injecting a Bronze consumer outage"
 uv run python -m reliability.compose_scenarios consumer-outage \
-  --outage-seconds "${CONSUMER_OUTAGE_SECONDS:-30}"
+  --outage-seconds "${CONSUMER_OUTAGE_SECONDS:-30}" \
+  --output "benchmark/results/failure-consumer-${BENCH_SHA}.json"
 
 log "Restarting Spark"
-uv run python -m reliability.compose_scenarios spark-restart
+uv run python -m reliability.compose_scenarios spark-restart \
+  --output "benchmark/results/failure-spark-${BENCH_SHA}.json"
 
 log "Replay and failure drills complete"
