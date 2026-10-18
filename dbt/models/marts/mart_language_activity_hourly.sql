@@ -6,7 +6,7 @@ with exploded as (
         author_did,
         language_code
     from {{ ref('fct_posts') }}
-    cross join unnest(languages) as language_code
+    cross join {{ unnest_as('languages', 'language_code') }}
     where not is_deleted
 )
 select

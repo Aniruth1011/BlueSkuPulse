@@ -121,6 +121,7 @@ linked to a reproducible command, retained artifact, environment, and Git commit
 |---|---|
 | Network activity | How many posts, likes, reposts, follows, and active authors are observed each hour? |
 | Topic velocity | Which hashtags are accelerating across 5m, 15m, and 1h windows? |
+| Topic co-occurrence | Which hashtags appear together, and how much more often than chance (lift)? |
 | Domain intelligence | Which external domains are shared most, rising fastest, and supported by unique sharers? |
 | Creator activity | Which accounts are posting, gaining observed follow edges, and receiving engagement? |
 | Post engagement | How many likes, reposts, replies, and quotes does each post receive? |
@@ -149,7 +150,7 @@ Current-state intermediate models
         │
         ├── Dimensions: actor, date, hour, language, domain
         ├── Facts: posts, likes, reposts, follows, post engagement
-        └── Marts: network, topics, domains, creators, engagement,
+        └── Marts: network, topics, topic pairs, domains, creators, engagement,
                    conversations, language activity, pipeline health
 ```
 
