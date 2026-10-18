@@ -111,7 +111,7 @@ linked to a reproducible command, retained artifact, environment, and Git commit
 | Additive schema-drift injection | **10,000/10,000** accepted; 0 DLQ |
 | dbt build | **28 models + 88 tests; 116/116 passing** |
 | Python/Spark suite | **63 tests passing** |
-| Core ingestion coverage | **84.89%** |
+| Core ingestion coverage | **85.93%** (CI gate: ≥80%) |
 | Prometheus critical-alert detection | **17.605s** |
 | Alertmanager receipt | **31.385s** |
 
