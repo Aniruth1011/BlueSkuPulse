@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import signal
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -112,12 +113,13 @@ class IngestionRunner:
         self._publisher = publisher
         self._cursor_store = cursor_store
         self._logger = logging.getLogger(self.__class__.__name__)
+        self.handled = 0
 
-    async def run(self, *, max_events: int | None = None) -> int:
+    async def run(self, *, max_events: int | None = None, stop: asyncio.Event | None = None) -> int:
         cursor = self._cursor_store.load(
             kind=self._source.cursor_kind, source_host=self._source.source_host
         )
-        handled = 0
+        handled = self.handled = 0
         await self._publisher.start()
         self._logger.info(
             "ingestion_started",
@@ -155,8 +157,13 @@ class IngestionRunner:
                         "cursor_checkpoint_committed",
                         extra={"fields": {"cursor": item.cursor.value}},
                     )
-                handled += 1
+                handled = self.handled = handled + 1
                 if max_events is not None and handled >= max_events:
+                    break
+                if stop is not None and stop.is_set():
+                    self._logger.info(
+                        "ingestion_stop_requested", extra={"fields": {"handled_events": handled}}
+                    )
                     break
         finally:
             await self._publisher.stop()
@@ -172,6 +179,51 @@ def build_source(settings: Settings) -> EventSource:
     return JetstreamV2Source(settings.jetstream_v2_url, settings.collections)
 
 
+async def run_until_stopped(
+    runner: IngestionRunner,
+    *,
+    max_events: int | None = None,
+    stop: asyncio.Event,
+    grace_seconds: float = 10,
+) -> int:
+    """Run ingestion, stopping at an event boundary once ``stop`` is set.
+
+    An idle source never reaches an event boundary, so after ``grace_seconds`` the run is
+    cancelled. That is safe: the cursor only ever reflects Kafka-acknowledged events, so any
+    in-flight event is redelivered on restart and deduplicated downstream.
+    """
+    task = asyncio.create_task(runner.run(max_events=max_events, stop=stop))
+    stop_waiter = asyncio.create_task(stop.wait())
+    try:
+        await asyncio.wait({task, stop_waiter}, return_when=asyncio.FIRST_COMPLETED)
+        if not task.done():
+            try:
+                return await asyncio.wait_for(asyncio.shield(task), timeout=grace_seconds)
+            except TimeoutError:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                logging.getLogger(__name__).warning(
+                    "ingestion_cancelled_after_grace",
+                    extra={"fields": {"grace_seconds": grace_seconds, "handled": runner.handled}},
+                )
+                return runner.handled
+        return task.result()
+    finally:
+        stop_waiter.cancel()
+
+
+def install_stop_handlers(stop: asyncio.Event) -> None:
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, stop.set)
+        except (NotImplementedError, RuntimeError):  # pragma: no cover - non-Unix event loops
+            pass
+
+
 async def async_main(max_events: int | None = None) -> int:
     settings = Settings.from_env()
     configure_logging(settings.log_level)
@@ -181,8 +233,10 @@ async def async_main(max_events: int | None = None) -> int:
         publisher=KafkaPublisher(settings),
         cursor_store=FileCursorStore(settings.cursor_path),
     )
+    stop = asyncio.Event()
+    install_stop_handlers(stop)
     started = datetime.now(UTC)
-    count = await runner.run(max_events=max_events)
+    count = await run_until_stopped(runner, max_events=max_events, stop=stop)
     logging.getLogger(__name__).info(
         "ingestion_summary",
         extra={

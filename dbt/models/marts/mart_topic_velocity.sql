@@ -9,7 +9,7 @@ with post_topics as (
         coalesce(e.total_engagement, 0) as engagement
     from {{ ref('fct_posts') }} p
     left join {{ ref('fct_post_engagement') }} e on p.at_uri = e.post_uri
-    cross join unnest({{ topic_tokens('p.text') }}) as topic
+    cross join {{ unnest_as(topic_tokens('p.text'), 'topic') }}
     where not p.is_deleted
 ), window_sizes as (
     select 5 as window_minutes union all select 15 union all select 60

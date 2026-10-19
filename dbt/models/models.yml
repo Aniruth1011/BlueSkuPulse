@@ -235,6 +235,32 @@ models:
         description: Whether author diversity and concentration checks pass.
         data_tests: [not_null]
 
+  - name: mart_topic_cooccurrence
+    description: Hourly hashtag pairs that appear in the same post, with support, confidence, lift, and spam safeguards.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [activity_hour, topic_a, topic_b]
+    columns:
+      - name: activity_hour
+        description: Start of the UTC hour in which the posts were created.
+        data_tests: [not_null]
+      - name: topic_a
+        description: Lexicographically smaller hashtag of the pair.
+        data_tests: [not_null]
+      - name: topic_b
+        description: Lexicographically larger hashtag of the pair.
+        data_tests: [not_null]
+      - name: pair_posts
+        description: Live posts in the hour that contain both hashtags.
+        data_tests: [not_null]
+      - name: lift
+        description: Observed pair frequency divided by the frequency expected if the hashtags were independent; above 1 means they attract each other.
+        data_tests: [not_null]
+      - name: passes_spam_guardrail
+        description: At least two authors and no single author contributing more than half of the pair's posts.
+        data_tests: [not_null]
+
   - name: mart_domain_velocity
     description: Hourly domain sharing, engagement, velocity, outbound share, and sharer concentration.
     data_tests:
@@ -299,3 +325,24 @@ models:
       - name: reconciliation_delta_ratio
         description: Unexplained difference divided by distinct Silver events.
         data_tests: [not_null]
+
+unit_tests:
+  - name: test_topic_cooccurrence_lift_and_guardrail
+    description: Pairs are canonicalized, deleted posts are ignored, and single-author pairs fail the guardrail.
+    model: mart_topic_cooccurrence
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref('fct_posts')
+        rows:
+          - {at_uri: p1, author_did: alice, text: "#Rust and #wasm", created_at: "2026-10-04 18:05:00", is_deleted: false}
+          - {at_uri: p2, author_did: bob, text: "#wasm #rust #rust", created_at: "2026-10-04 18:20:00", is_deleted: false}
+          - {at_uri: p3, author_did: carol, text: "just #rust", created_at: "2026-10-04 18:40:00", is_deleted: false}
+          - {at_uri: p4, author_did: dave, text: "#spam #deals", created_at: "2026-10-04 18:41:00", is_deleted: false}
+          - {at_uri: p5, author_did: dave, text: "#spam #deals again", created_at: "2026-10-04 18:42:00", is_deleted: false}
+          - {at_uri: p6, author_did: erin, text: "#rust #wasm", created_at: "2026-10-04 18:50:00", is_deleted: true}
+    expect:
+      rows:
+        - {topic_a: "#rust", topic_b: "#wasm", pair_posts: 2, unique_authors: 2, topic_a_posts: 3, topic_b_posts: 2, tagged_posts: 5, lift: 1.6666666666666667, passes_spam_guardrail: true}
+        - {topic_a: "#deals", topic_b: "#spam", pair_posts: 2, unique_authors: 1, topic_a_posts: 2, topic_b_posts: 2, tagged_posts: 5, lift: 2.5, passes_spam_guardrail: false}

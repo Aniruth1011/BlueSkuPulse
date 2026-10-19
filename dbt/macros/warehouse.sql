@@ -93,3 +93,12 @@
     current_timestamp + interval '1 day'
   {% endif %}
 {% endmacro %}
+
+{% macro unnest_as(array_expression, column_name) %}
+  {#- DuckDB treats `unnest(...) as x` as a table alias, yielding a STRUCT column. -#}
+  {% if target.type == 'bigquery' %}
+    unnest({{ array_expression }}) as {{ column_name }}
+  {% else %}
+    unnest({{ array_expression }}) as {{ column_name }}_unnested({{ column_name }})
+  {% endif %}
+{% endmacro %}
